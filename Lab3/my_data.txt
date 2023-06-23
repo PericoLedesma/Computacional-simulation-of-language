@@ -1,0 +1,5 @@
+team	points	assists	rebounds
+Mavs	99	22	30
+Mavs	90	19	39
+Spurs	84	16	42
+Nets	96	20	26

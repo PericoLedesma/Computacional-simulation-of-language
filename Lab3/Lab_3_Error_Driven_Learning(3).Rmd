@@ -1,0 +1,692 @@
+---
+title: "Lab 3 Error Driven Learning"
+author: "Pedro Rodriguez de Ledesma"
+date: "29/05/2022"
+output:
+  html_document:
+    df_print: paged
+---
+
+Instructions: This lab should give an introduction to modelling experimental results with Rescorla-Wagner learning. 
+There are three parts. Part A introduces the package with a simple simulation. Part B looks at the Elman (1990) simulation and tries to recreate it with R-W learning. Part C looks at Experiment 1 in the Mirman et al. (2010) study. Questions are identified with QA/QB/QC + the question number. Sometimes a question has several parts: these are numbered inside the question. There are a small number of easy questions that just ask you to run some code and answer some basic questions. But most question ask you to make a proposal or speculate. More so than in the previous labs, in this lab you will need to write more comprehensive answers. For some of these questions, there isn't a right or wrong answer; instead good answers are well-motivated answers. Also, please review and if necessary revise any longer answers for readability and clarity. We've added points to each question, but these are guidelines and we reserve the right to make changes if necessary. 
+
+We hope you find this lab fun ! 
+
+Good luck! /Jennifer, Frank, Ella and Brown.
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This should help in saving interim results to cut down on processing time.
+```{r setup2, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+
+
+## Packages needed
+For this lab you are going to need to install the EDL package and some other packages for the plots, data handling, etc. You can do this in R studio under "Tools"- "Install Packages" and then search for the correct packages. Alternatively you can try uncommenting the following lsit.  
+
+```{r packages,  message = FALSE, warning = FALSE}
+install.packages("ndl", repos="https://cloud.r-project.org")
+install.packages("plotfunctions", repos="https://cloud.r-project.org")
+install.packages("http://www.jacolienvanrij.com/NDL/NDLvisualization_0.1.tar.gz",repos=NULL,type="source")
+install.packages("edl")
+install.packages(c("data.table", "plotfunctions", "sigmoid"))
+install.packages("edl")
+
+library(ndl)
+library(NDLvisualization)
+library(edl)
+library(edlibR)
+library(sigmoid)
+```
+
+## A very simple example
+
+For this first example, we are simply going to learn to predict some very simple sentences like "John sleeps" and "Mary sings". 
+
+```{r example1}
+
+example1 <- data.frame(Cues = c("John", "Mary"),
+                        Outcomes = c("sleeps", "sings"),
+                        Frequency = c(1,2))
+# ... will result in this:
+example1
+```
+We then can use this information to create training data. We then use the RWlearning()
+command to learn from the data. As you can see, this is actually the RW formula, and you can define 
+**eta**, **alpha**, *beta1*, *beta2*
+
+```{r train_example1}
+# ... and in this weight matrix:
+ex1_dat <- createTrainingData(example1,nruns = 100)
+ex1_wm  <- RWlearning(ex1_dat, alpha=0.1, beta1=0.1, beta2=0.1, progress=FALSE)
+
+
+# This prints the final weights after all runs
+ex1_wmfinal <- ex1_wm[[length(ex1_wm)]]
+ex1_wmfinal
+
+```
+**QA1:** (1pt) Why do the connections weights from "Mary" to "sings" and "John" to "sleeps" differ?
+The connections are dissimilar due to the frequency they occur after each of the cues. While 'John' with 'sleeps' occurs ones, 'John' 'sings' occurs none, the frequency of 'Mary' 'sings' is double. Therefore, the number of runs that it will strength the connection weights is largest. However, is not a linear relation (new)
+
+As we are using the RW formula, sum of associated strengths for all cues/features/conditions stimuli are different.
+
+**QA2:** (1pt) When will the connection weights be the same?
+
+The connections weights will be equal when they have same frequency. For example, both 1.
+
+```{r}
+# This allows you to print two plots side-by-side
+par(mfrow=c(1,2))
+
+plotCueWeights(ex1_wm, cue="John")
+plotCueWeights(ex1_wm, cue="Mary")
+plotOutcomeWeights(ex1_wm,outcome="sleeps")
+plotOutcomeWeights(ex1_wm,outcome="sings")
+
+```
+
+Let's look at the activations for these two cues and the given outcomes. 
+```{r}
+ex1_act <- getActivations(
+ex1_wm,
+data = ex1_dat
+)
+head(ex1_act)
+```
+```{r}
+
+ex1_act
+```
+**QA3:** (1pt) What's the difference between what you see in ex1_wmfinal compared to ex1_act?
+
+We are here watching the learning of the connection weights as we can see in the last value of each combination of cue-outcome. In each run it increases, specially for mary-sings.
+
+**QA4:** (3pts) Inspect ex1_act and explain what you see. 
+(1) How many rows are there in the file? Explain why.
+
+In total there are 300 rows. This is because we are training each of the cue-outcome combination 100 times. In the case of Mary-sing the frequency is 2 and the runs per frequency is 100, therefore 200 run. In each run we are computing the Rescorla-Wagner formula.
+
+(2) How are the cue-outcome pairs ordered?
+
+They are not ordered, they come randomly by the probability distribution by the frequency. However, the frequency of Mary-sings is double than John-Sleeps.
+
+(3) What is the final activation level for both cue-outcome pairs? 
+
+The final activation is the one presented above. For cue-outcome combination of Mary-sings is 0.8662 while for the other John-Sleeps is 0.6339. As we can see the relationship is not linear.
+
+Now let's make this more complex by adding some cue competition. 
+
+```{r example2}
+example2 <- data.frame(Cues = c("John", "Mary", "Mary"),
+                        Outcomes = c("sleeps", "sings", "sleeps"),
+                        Frequency = c(1,1,1))
+# ... will result in this:
+example2
+```
+Train example 2 similar to example 1 above. 
+```{r train_example1}
+# ... and in this weight matrix:
+ex2_dat <- createTrainingData(example2,nruns = 100)
+ex2_wm  <- RWlearning(ex2_dat, alpha=0.1, beta1=0.1, beta2=0.1, progress=FALSE)
+
+# This prints the final weights after all runs
+ex2_wmfinal <- ex2_wm[[length(ex2_wm)]]
+ex2_wmfinal
+```
+
+
+**QA5:** (1pt) Plot the outcomes given the cues for "Mary" and "John".
+
+```{r}
+# This allows you to print two plots side-by-side
+par(mfrow=c(1,2))
+
+plotCueWeights(ex2_wm, cue="John")
+plotCueWeights(ex2_wm, cue="Mary")
+plotOutcomeWeights(ex2_wm,outcome="sleeps")
+plotOutcomeWeights(ex2_wm,outcome="sings")
+
+```
+
+**QA6:** (2pts) What happens if you increase the frequency of the "Mary" --> "sings" cue-outcome combo? Does the number of training runs (epochs) influence the connection weights? Explain your results. 
+
+It changes the association strength. In that case, it is more likely "Mary" --> "sings" than "Mary" --> "sleeps", while now they have same probabilities or association connections. 
+
+We can see in the graphs how the number of run influence in the connection weights.
+
+
+```{r example2}
+example2 <- data.frame(Cues = c("John", "Mary", "Mary"),
+                        Outcomes = c("sleeps", "sings", "sleeps"),
+                        Frequency = c(1,2,1))
+# ... will result in this:
+example2
+```
+
+```{r train_example1}
+# ... and in this weight matrix:
+ex2_dat <- createTrainingData(example2,nruns = 100)
+ex2_wm  <- RWlearning(ex2_dat, alpha=0.1, beta1=0.1, beta2=0.1, progress=FALSE)
+
+# This prints the final weights after all runs
+ex2_wmfinal <- ex2_wm[[length(ex2_wm)]]
+ex2_wmfinal
+```
+
+
+
+
+## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## 
+
+## Part B: Elman (1990) with R-W learning
+
+Let's see how well R-W learning can predict the next word in a sequence using the original Elman data.
+We are going to do this by modifying a file with the data, with one word on each line, into a data frame where each word is the outcome of the word that proceeds it. 
+
+First, have a look at the original file, which is created according to the Elman (1990) grammar:
+
+```{r Elman_data}
+
+Elman_dat<- read.delim(file="Elman_full_data.txt", fileEncoding="UTF-8-BOM",header=FALSE)
+
+head(Elman_dat)
+```
+
+Now we need to create a new dataset where each word is predicted by the previous word. We will do this by using the following function, **getContextDataFrame** which also can add contextual information, so we can use information about whether a cue was the previous word, or if a cue (word) was two words away from the word we are trying to predict (the current outcome.)
+
+
+```{r getContextDataFrame}
+getContextDataFrame = function(fileName, contextSize=2, nullContext=NA) {
+  data = read.delim(fileName, header=FALSE)$V1
+  output = data.frame()
+  for (i in 1:contextSize) {
+    thisContext = data.frame(
+      context  = c(rep(nullContext, i), head(data, -i)),
+      distance = rep(-(i-1), length(data)),
+      word     = data
+    )
+    output = rbind(output, thisContext)
+  }
+  output = output[order(rep(1:length(data),contextSize)),]
+  rownames(output) = 1:dim(output)[1]
+  output
+}
+
+```
+
+Now take the data frame, which is one word on each line, and create the new dataframe. We are just going to use the previous word to predict the next word in the sequence, just like in Elman (1990), so we will set the context size to 1 (one word previous).
+
+```{r}
+big_elman_dat <- getContextDataFrame("Elman_full_data.txt",1) 
+head(big_elman_dat)
+
+```
+
+Now we are going to create the correct format of the training data for the RW learning function. Note we won't include distance for now, because it's always 0 currently. 
+
+```{r Elman Training Data}
+big_elman_dat$Cues      <- paste("BG", big_elman_dat$context, sep="_")
+big_elman_dat$Outcomes  <- paste(big_elman_dat$word)
+head(big_elman_dat)
+```
+
+Remove extra columns for readability and add an ID for learning events.
+
+```{r Elman Cues and Outcomes}
+
+big_elman_dat <- big_elman_dat[, c("Cues", "Outcomes")]
+head(big_elman_dat)
+
+big_elman_dat$ID <- 1:nrow(big_elman_dat)
+head(big_elman_dat)
+
+table(big_elman_dat$Outcomes)
+```
+
+ Here we have to retain the order in the training set, so make sure to set *random=FALSE*. 
+ 
+```{r Create Training Data Elman}
+big_el_train <- createTrainingData(big_elman_dat, nruns=1, random=FALSE)
+
+ex1_dat <- createTrainingData(example1,nruns = 100)
+ex2_wm  <- RWlearning(ex2_dat, alpha=0.1, beta1=0.1, beta2=0.1, progress=FALSE)
+
+head(big_el_train)
+```
+
+Now comes the fun part: the learning. 
+
+```{r Train Elman, R.options=list(max.print=10)}
+wm_Elman <- RWlearning(big_el_train, progress=FALSE)
+```
+ This give you the results for the words 1, 3, and 5 in the weight matrix. Or you can see the first 15 lines with *head*.
+ 
+```{r}
+wm_Elman[[1]]
+wm_Elman[[3]]
+wm_Elman[[5]]
+head(wm_Elman, n=2)
+
+```
+**QB1** (1pt) The weights are changing step by step. Right now our RWLearning() function is using the default values. What are these values? 
+The default values of the parameters of the function RWLearning() are:
+  wm = NULL,
+  eta = 0.01,
+  lambda = 1 -->maximum values of the unconditional stimulus
+  alpha = 0.1 --> learning rate
+  beta1 = 0.1 -->varies the effects of negative or positive evidence
+  beta2 = 0.1 -->varies the effects of negative or positive 
+  
+  However, the Change in association strength is changing in each step
+  
+getWM() calculates the activations for all outcome. That's a bit too much, though go ahead and look, (it doesn't take long). (getWM(wm_Elman,1))
+
+```{r, R.options=list(max.print=10)}
+getWM(wm_Elman,1)
+```
+
+This command allows you to print two graphs next to each other
+
+```{r}
+oldpar <- par(mfrow=c(1,2), cex=1.1)
+```
+
+plot left:
+
+```{r}
+plotCueWeights(wm_Elman, cue="dragon")
+plotCueWeights(wm_Elman, cue="car")
+
+```
+
+This shows given *dragon* as a cue, the most likely outcome after running through the entire corpus is *eat*. 
+
+
+**Plot Outcomes**
+
+```{r}
+plotOutcomeWeights(wm_Elman, outcome="book")
+plotOutcomeWeights(wm_Elman, outcome="cookie")
+```
+
+**QB2:** (2pts) The activation connection between *eat* and *cookie* is really very high. But the activation between *see* and *book* is lower. Why is that? Explain. 
+
+The activation connection between *eat* and *cookie* is higher than *see* and *book* is due to the fact of more frequent occurrence of the pair *eat* and *cookie*. Therefore, the association conection increased less times.
+In the input data (Elman Text), the cue-outcome pair of of *cookie* after *eat* is more prevalent than *book* after *see*. 
+
+Let's get the activations from the weight matrix. 
+
+```{r}
+
+Elman_final_state <- wm_Elman[[length(wm_Elman)]]
+head(Elman_final_state)
+
+```
+This gives the Cue combination, and the the most likely prediction (Under "Outcomes") based on the activation weights for all the epochs. 
+It also gives you the weights for the other possible outcomes. But actually we are interested in the final activations: 
+
+To determine what the probability is of a given outcome to be predicted by a set of cues, we need to first extract the activations for the cues to the outcome connection at a certain training trial. In the follow code (modified from van Rij, 2021), for the cueset "girl"  to the outcome "smell" after the 1000th trial is extracted, as are 
+the activations from "eat" to "bread".
+
+The following then sets up a dataframe with all the information about the choice alternatives, the cue sets associated with the alternatives, and leaves room for the choice probabilty (also from van Rij, 2021).
+
+Then, the luce choice function is calculated to normalize the potential choices and determine the probability of each outcome. Because the luce choice function only accepts positive values, all negative values are converted to zero (applying the relu function).
+
+Let's try getting the activations of an outcome set, given a cue:
+
+```{r}
+trial <- 1000
+
+options.activations <-
+   c(unlist(getActivations(wm_Elman, select.outcomes ="cookie", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="bread", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="sandwich", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="girl", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="boy", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="smell", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="dragon", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="eat", cueset="eat"))[trial])
+     
+     
+    options.choiceAlternatives <-
+  c("cookie", "bread", "sandwich", "girl", "boy","smell", "dragon", "eat")
+# all outcome sets that are choice alternatives
+
+options <- data.frame(activations = options.activations,
+                      cue = "eat",
+                      choiceAlternatives = options.choiceAlternatives,
+                      choiceProbability = 0, # dummy column to fill below
+                      stringsAsFactors = F)     
+     
+     
+
+for (r in 1:nrow(options)){
+  options$choiceProbability[r] <- luceChoice(relu(options$activations[r]),
+                                           relu(options$activations))
+}
+
+options
+```
+**QB3:** (1pt) What do the choice probabilities add up to for the outcome "eat" as calculated above?
+
+We can see the choice probabilities are higher for the outcome cookie, bread or sandwich. On the other hand, the probabilities for eat are the lowest. The luce choice function normalize the potential choices and determine the probability of each outcome.
+
+Because luce choice function does not accepts negative values, all negative values are converted to zero (applying the relu function)
+
+**QB4:** (1pt) What happens to the sum of choice probabilities if you only calculate for the outcomes "bread" and "sandwich".
+
+Due to the normalization and while both have almost same value of activation function after 1000 trials, they both will have same choice probabilities (really similar) of 50%.
+
+**QB5** (4pts) If we want to determine which outcome would be most likely to be chosen, what's wrong with simply using the activation weights themselves? Why do we need to calculate the choice probability? Explain your answer. (Hint: see what happens if you increase the number of runs.)
+
+The activation functions doesnt gives us the probability of an outcome between others. While simply using activation function after training for multiple runs, the neuron with the highest activation will be fired every time in a presence of cue ignoring all other possibilities of outcome for that single cue.The choice probability indicates the possibility of multiple outputs stating their importance or frequency of occurrence for the single cue which can be useful in prediction.
+
+
+```{r}
+trial <- 2000
+
+options.activations <-
+   c(unlist(getActivations(wm_Elman, select.outcomes ="cookie", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="bread", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="sandwich", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="girl", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="boy", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="smell", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="dragon", cueset="eat"))[trial],
+     unlist(getActivations(wm_Elman, select.outcomes ="eat", cueset="eat"))[trial])
+     
+     
+    options.choiceAlternatives <-
+  c("cookie", "bread", "sandwich", "girl", "boy","smell", "dragon", "eat")
+# all outcome sets that are choice alternatives
+
+options <- data.frame(activations = options.activations,
+                      cue = "eat",
+                      choiceAlternatives = options.choiceAlternatives,
+                      choiceProbability = 0, # dummy column to fill below
+                      stringsAsFactors = F)     
+     
+     
+
+for (r in 1:nrow(options)){
+  options$choiceProbability[r] <- luceChoice(relu(options$activations[r]),
+                                           relu(options$activations))
+}
+
+options
+```
+
+
+```{r}
+act <- act[, c("Cues", "Outcomes")]
+head(act)
+
+```
+
+
+
+**QB6:** (6pts) How does the model compare to the Elman (1990) results. Compare the results for a few of the words to the hierichical cluster diagram in Figure 7 in Elman (1990). For example, can you see that *monster, lion* and *dragon* are similar but differ from *sandwich, cookie* and *bread*. Do the results look similar to the modeling of the Elman data with RNNs? Run some experiments and explain your answers. 
+
+The current model in comparison with the results presented by Elamn(1990) doesnt differ much. We can see it by contrast the plotted dendogram of our model with Elamn data. The model was able to distinguish between words and put them into different categories, like in the case of monsters, lion and dragon. This words have negative probabilities.
+Similar to our model, the RNNs of Elman grouped monters, lions and dragon
+
+Similar to Elman RNN, our model grouped girls and boys without nothing the similarities of this two nouns that are animated, and grouped cookie, bread and sandwith.
+
+
+**QB7** (4pts) Is it fair to compare the output of the Elman_dat model to the output of the RNN we created in Lab 1? One major difference between the RNN models and the RW model is that RNNs have a "memory component" both in the activation weights to the hidden layer and via the context layer in the RNN (each input is also paired with information about the previous item.) But if we only use the previous word to predict the next word, we are in essence using a single-layer perceptron (without bias). Why might it be said to be fair? Why might it be said to be unfair?
+
+It seems to me the models are really similar in how they work the RW model to RNNs.
+Both models make use of previous word to predict the next word. They both share the common thought of process in prediction the next word by considering the previous word. In this sense, I feel it is fair to compare these two models.
+
+On the other hand, they differ in their architecture and implementation. In simple words, RW learning model can be described as a simple perceptron which is implemented to predict the next word by considering the previous word (with no bias) whereas RNNs constitutes of memory component with presence of hidden layer along with context layer. 
+
+Moreover, in RNNs each item is paired up with information about the previous item helping in establishing long term dependencies making the prediction more reliable. RNNs have more advantage than a simple perceptron in terms of retaining memory and consequently making predictions.
+
+**QB8** (3pts) Can you think of a way to represent the data in the Elman R-W model that would make it more comparable to an RNN? Feel free to speculate here. We are looking at the "thoughtfulness" of the answers.
+
+It seems to me that we can group them by thresholds that separate them by similar likelihood. However, this solution is not the most suitable.
+
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# Part C: Predicting words and partwords Mirman et al.(2010) Experiment 1
+
+In Lab 2, we recreated a simulation of an experiment done in Mirman et al. (2010), Experiment 2. Experiment 1 in that paper is simpler, and we examing how it could be modelled with Rescorla-Wagner learning now here.  
+
+Recall that one of the main aims of the two papers by Mirman was to examine the differences between frequency vs. transitional probabilities. The results with SRNs showed that SRNs seemed to be more sensitive to transitional
+probabilities than frequencies, and people seem to show the same sensitivities.
+
+We showed in Lab 2, where we replicated Mirman et al. (2010) Experiment 2, that that is the case.
+But can the same experiment also be modelled with Rescorla-Wagner learning, and will we get similar results? In Part C we will try to model Experiment 1 from Mirman et al. (2010).
+
+##create a datafram with the right format
+
+```{r}
+
+mirman_dat <- read.delim(file= "Mirman_simple_list.txt" )
+mirman_simple_dat <- getContextDataFrame("Mirman_simple_list.txt",1) 
+head(mirman_simple_dat)
+```
+
+In Mirman et al. (2010), different types of words made up of three syllables were created from a list of 12 syllables. We will use (pa, pi,  pe,  po,  ta, ti, te, to, ka, ki, ke, ko).
+ 
+We then can concatenate them into four 3 syllable words. Note that we'll use syllables with "p" as the onset as the first syllable, syllables with "t" as the onset as the middle syllable, and syllables with "k" as the onset as the final syllable. This will make it easier to keep track of the results. 
+For the simulations, we want to pit frequency against transiational probabilities. For that reason, in trainingw e will present two of the words twice as frequently as we present tow other of the workds. 
+
+ patike (400 times)
+ piteko (400 times)
+ petoka (200 times)
+ potaki (200 times)
+
+ The strings will be like: 
+   
+   patikepitekopetokapatikepotaki etc. 
+ 
+These are true words. There are also part words, created by a sequence of three syllables across a word boundary. 
+Example partwords are:  
+
+ kepite
+ tokapa
+ kapati etc.
+
+Untrained (new) words would be syllable sequences that never occurred, such as: 
+
+pakata
+pitiki
+potoko etc.
+
+Models was trained to activate the next word in the sequence, given the previous word. 
+
+There is one slight difference between this dataset and the one in the actual Mirman et al. paper: I DID NOT make sure that the same word can occur with two in a row. 
+ 
+ **QC1** (6pts) The simulation we are looking at is based on an artificial grammar experiment presented in Mirman et al. (2010) as Experiment 2. In the experiment participants listened to a stream of words, and then had to identify which words they had heard before and which not. In the experiment, the stream of words presented was constructed so that the same word did not occur twice in a row. 
+ 
+ (1) Why might this be important?? 
+ 
+ This could be due to the learning rate, to ensure the same frequency in all the words. The frequency of the words would be dissimilar to the others ones, making it more likely to learn and predict.
+ 
+ (2) Does it matter to learning in the model whether or not an item occurs twice in a row? 
+ 
+ It seems to me it matters. Like humans, the model is is sensitive to frequency and will learn and predict easily by repetition.
+ 
+ (3) Would you expect a different outcome for human participants if each item was presented with all repetition in one block? (i.e. if participants were exposed to "patike" 400 times first, followed by "piteko" 400 times, etc.). Explain your answer.
+
+Yes, If I imagine myself learning it for example, I will be more prompt to remember if I have 400 consecutives times to remember the combination. It is more difficult to remember them if they are changing all time
+ 
+The data file is "mirman_simple_list.txt". Use **getContextDataFrame** to put it in the correct format.
+
+```{r}
+mirman_dat<- read.delim(file="mirman_simple_list.txt")
+mirman_simple_dat <- getContextDataFrame("mirman_simple_list.txt",1) 
+head(mirman_simple_dat)
+```
+
+
+ Then we can learn using only the context as a cue, and word as the outcome
+ Remove distance column to simplify this example:
+
+```{r}
+mirman_simple_dat <- subset(mirman_simple_dat, select =-c(distance))
+
+mirman_simple_dat$Cues      <- paste("BG", mirman_simple_dat$context, sep="_")
+mirman_simple_dat$Outcomes  <- paste(mirman_simple_dat$word)
+head(mirman_simple_dat)
+```
+
+Remove unneeded columns for readability and add and ID for learning event tracking:
+Look at the table with the outcomes to make sure that the frequency distribution is correct.
+```{r}
+mirman_simple_dat <- mirman_simple_dat[, c("Cues", "Outcomes")]
+mirman_simple_dat$ID <- 1:nrow(mirman_simple_dat)
+head(mirman_simple_dat)
+
+```
+```{r Check Mirman Outcomes}
+table(mirman_simple_dat$Outcomes)
+```
+
+
+Now we can create training data:
+
+```{r, include=FALSE}
+msdat <- createTrainingData(mirman_simple_dat,nruns = 1)
+wm_ms  <- RWlearning(msdat, progress=FALSE)
+head(wm_ms)
+```
+
+
+``` {r}
+
+plotCueWeights(wm_ms, cue="po")
+plotCueWeights(wm_ms, cue="pa")
+plotCueWeights(wm_ms, cue="ti")
+plotCueWeights(wm_ms, cue="ke")
+
+plotOutcomeWeights(wm_ms, outcome="po")
+head(wm_ms)
+
+```
+
+ patike (400 times)
+ piteko (400 times)
+ petoka (200 times)
+ potaki (200 times)
+ 
+**QC2:** (2pts) From the plots, does it look as if the network learned to predict the next syllable in the real words? How about in part words? Explain or illustrate your answer.
+
+We can see clearly that the network has learn to predict the next syllable of the real words. For example, in the 2nd, 3th and 4th graph we can see that the word patike has been correctly predicted.
+
+In the case of part words, the cue presented is "ke" and the outcome of the network is struggling with two possible output "pi" and "pa" as the model is trained on both real and part words.
+
+Let's get the final state of the network. 
+```{r ms_final states}
+
+wm_ms[[length(wm_ms)]]
+```
+**QC3:** (1pt) Do you see any evidence that the network has learned to predict further than just the next syllable in a word?  Explain.
+
+It seems to me there is no evidence that the network has learn to predict further than the just the next syllable. The model cant predict the third word without knowing the second one. Is just a sequence of syllables in which the next one is predicted
+
+# Mirman et al. (2010) with more context 
+Actually in the Mirman experiment, we would expect participants to also be learning more long distance dependencies, such as that "pi" always comes at the beginning of a word that ends with "ko", even though they are two syllables away. To see how learning progresses if we include more context, let's add information for each outcome about the previous word, and the second previous word, by setting the context to "2" with **getContextDataFrame**.
+
+```{r}
+mirman_simple_dat <- getContextDataFrame("mirman_simple_list.txt",2) 
+head(mirman_simple_dat)
+```
+
+Then we can learn using only the context as a cue, and word as the outcome
+Remove distance column to simplify this example:
+
+```{r}
+#mirman_simple_dat <- subset(mirman_simple_dat, select =-c(distance))
+
+mirman_simple_dat$Cues      <- paste(mirman_simple_dat$context, mirman_simple_dat$distance, sep="@")
+mirman_simple_dat$Cues      <- paste("BG", mirman_simple_dat$Cues, sep="_")
+mirman_simple_dat$Outcomes  <- paste(mirman_simple_dat$word)
+head(mirman_simple_dat)
+```
+
+Remove unneeded columns for readability and add and ID for learning event tracking:
+Look at the table with the outcomes to make sure that the frequency distribution is correct.
+```{r}
+mirman_simple_dat <- mirman_simple_dat[, c("Cues", "Outcomes")]
+mirman_simple_dat$ID <- 1:nrow(mirman_simple_dat)
+head(mirman_simple_dat)
+
+```
+
+Now we can create training data:
+
+```{r}
+msdat <- createTrainingData(mirman_simple_dat,nruns = 10)
+wm_ms  <- RWlearning(msdat, progress=FALSE)
+head(wm_ms)
+
+
+plotCueWeights(wm_ms, cue="po@0")
+plotCueWeights(wm_ms, cue="po@-1")
+plotCueWeights(wm_ms, cue="ti@-1")
+plotCueWeights(wm_ms, cue="ka@0")
+
+plotOutcomeWeights(wm_ms, outcome="po")
+plotOutcomeWeights(wm_ms, outcome="ke")
+
+# Get the final states of the network
+
+wm_ms[[length(wm_ms)]]
+```
+ patike (400 times)
+ piteko (400 times)
+ petoka (200 times)
+ potaki (200 times)
+
+**QC4:** (1pt) Syllables beginning with "k" at position 0 show competition between four different outcomes. Explain why none of the outcomes reaches 100%.
+The Syllables that beggining with 'K' at position 0 shows competition between four different outcomes 'pa', 'pi', 'po' and 'pe'. However, non of this different outcomes achive a probability of 1 due to the varity of outcome probabilities. As explained in previous sections, these syllables that start with 'k' are used to end every word and therefore, there is no clearly outcome without knowing the vocal.
+
+
+**QC5:** (1pt) Similar competition occurs with another set of syllables. Which ones, and why? It happens with all the letters. We can predict anything without 2 consecutive letters.
+
+**QC6:** (4pts) This method of cue representation is similar to the cue representation used in the Wietse De Vries paper that Frank presented in Lecture 6.
+(1) How does it differ from the way the input was represented in the SRN simulations in the Mirman et al. (2010) paper? 
+
+This method differs in the input that is presented with each syllable has its positions tags between 0 and 1 and represents the present and previous syllable respectively.
+
+(2) Do you think that the representation is appropriate/comparable/equivalent? Why or why not? Explain your answers. 
+
+```{r}
+# This prints the final weights after all runs
+wm_ms_final <- wm_ms[[length(wm_ms)]]
+# this is the same as getWM(wm_ms)
+wm_ms_final
+head(wm_ms_final)
+```
+
+Now we want to know for each cue, what outcome had the highest activation value (and what was it?). 
+We can do that with the following code snippet:
+
+```{r df with highest activation}
+predicted <- wm_ms_final[,0]
+
+
+DF <- as.data.frame.matrix(wm_ms_final)
+
+j1 <- max.col(DF, "first")
+highest_activation <- DF[cbind(1:nrow(DF), j1)]
+best_outcome <- names(DF)[j1]
+best_predictions <- cbind(predicted, highest_activation, best_outcome)
+best_predictions
+
+```
+
+**QC7:** (6pts) The Mirman et al.(2010) also did a second simulation where they first trained the model on syllable sequences (words) and then checked to see if those sequences with high transitional probabilities were easier to associate with object names, in order to simulate word learning. We recreated this simulation in Lab 2. Outline a proposal for how we could create a comparable model using Rescorla-Wagner learning. Explain what the input would be, what the output would be and what you expect the results to be. Note: this is not straightforward, and we don't expect everyone to come up with the perfect proposal. You do not have to actually implement this proposal. A conceptual outline is sufficient. 
+Instead we are looking for evidence that you thought about how it could be modeled, but are also aware of the shortcomings of whatever you propose. 
+
+In order to find the transitional probabilities with Rescorla- Wagner learning, Bayesian probability theory can be put to use and evaluation can be done. As the Bayesian theorem describes the probability of an event based on prior knowledge of conditions that might be related to the event, so this theory can be applied to the sequences with transitional probabilities in order to simulate word learning. The input to the network will be represented in a form of syllables as similar to Mirman (2010) but along with it we also input the prior knowledge of the transitions present in syllable sequences which forces the network to consider both of them resulting in word learning. According to me, putting this method in use the output of the model will be able to associate the sequences with high transitional probability. The expected results will be acceptable in a sense that the presence of prior knowledge will results in better understanding but will be less efficient than RNNs. RW- learning with Bayes theorem will introduce some previously known knowledge but not as complete as RNNs.
+
